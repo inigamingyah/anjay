@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cyberpunk Ray-Traced UI</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Montserrat:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ===== BODY & PSEUDO-RAYTRACING BG ===== */
+body {
+  margin: 0; padding: 50px 10px;
+  min-height: 100vh;
+  background: #0f0c29;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-start;
+  color: #fff;
+  overflow: hidden;
+  font-family: 'Montserrat', sans-serif;
+}
+
+/* Particle Background for "RTX" glow effect */
+#bgCanvas { 
+  position: fixed; top:0; left:0; width:100%; height:100%; z-index:-1; 
+}
+
+/* ===== DISPLAY BOX ===== */
+.display-box {
+  width: 100%; max-width: 520px; min-height: 180px;
+  background: rgba(0,255,255,0.05);
+  border-radius: 30px;
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(0,255,255,0.2);
+  padding: 40px 30px;
+  text-align: center; font-size:1.4em;
+  margin-bottom: 35px;
+  box-shadow: 0 15px 100px rgba(0,255,255,0.4), 0 0 60px #06d6a0, 0 0 150px #1dd3b0;
+  transition: transform 0.5s, box-shadow 0.5s;
+}
+.display-box:hover {
+  transform: scale(1.08) rotateX(3deg);
+  box-shadow: 0 25px 140px rgba(0,255,255,0.5), 0 0 100px #06d6a0, 0 0 200px #1dd3b0;
+}
+
+/* Typing cursor */
+.cursor {
+  display: inline-block;
+  width: 3px;
+  height: 1.1em;
+  background-color: #06d6a0;
+  margin-left: 3px;
+  animation: blink 0.7s infinite, flicker 0.15s infinite alternate;
+  vertical-align: bottom;
+}
+@keyframes blink {0%,50%,100%{opacity:1}25%,75%{opacity:0}}
+@keyframes flicker {0%,100%{opacity:1;}50%{opacity:0.2;}}
+
+/* ===== CONTROLS ===== */
+.controls { display:flex; flex-direction:column; width:100%; max-width:520px; gap:20px; }
+input, button { padding:18px; border:none; border-radius:25px; font-size:1.05em; width:100%; box-sizing:border-box; outline:none; transition:all 0.4s ease; }
+input { background: rgba(255,255,255,0.08); color:#fff; border:1px solid rgba(255,255,255,0.25); box-shadow: inset 0 0 25px rgba(255,255,255,0.15);}
+input::placeholder { color: rgba(255,255,255,0.6); }
+input:focus { background: rgba(255,255,255,0.2); border-color: #06d6a0; box-shadow: 0 0 25px #06d6a0; }
+button { cursor:pointer; background: linear-gradient(135deg, #06d6a0, #1dd3b0); color:#0f0c29; font-weight:700; font-family:'Orbitron',sans-serif; letter-spacing:1px; box-shadow:0 6px 40px rgba(0,255,255,0.5); position:relative; overflow:hidden; }
+button::before{ content:''; position:absolute; top:0; left:-100%; width:100%; height:100%; background: rgba(255,255,255,0.15); transform: skewX(-25deg); transition:all 0.5s; }
+button:hover::before{ left:100%; } 
+button:hover { transform: translateY(-3px) scale(1.05); }
+
+/* ===== PHONE MODAL ===== */
+.phone-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); align-items:center; justify-content:center; padding:20px; animation:fadeIn 0.5s forwards;}
+@keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
+
+.phone-box { background: rgba(29,53,87,0.95); padding:35px; border-radius:30px; text-align:center; width:100%; max-width:380px; box-shadow:0 20px 100px rgba(0,255,255,0.5),0 0 80px #06d6a0; transform: translateY(-50px); animation:slideUp 0.5s forwards; position:relative;}
+@keyframes slideUp{from{transform:translateY(-50px);opacity:0} to{transform:translateY(0);opacity:1}}
+
+.phone-box h2{margin:20px 0; font-size:1.7em; font-family:'Orbitron',sans-serif; color:#06d6a0; text-shadow:0 0 15px #06d6a0,0 0 30px #1dd3b0;}
+.phone-box .pulse{display:inline-block; animation:pulse 1s infinite;}
+@keyframes pulse{0%{transform:scale(1);opacity:0.8}50%{transform:scale(1.15);opacity:1}100%{transform:scale(1);opacity:0.8}}
+
+.close-btn{margin-top:25px;background:#e63946;color:#fff;font-weight:700;transition:all 0.3s; letter-spacing:1px;}
+.close-btn:hover{background:#d62828; transform:translateY(-3px) scale(1.05);}
+
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<div class="display-box" id="displayBox">
+  <div id="displayName" class="placeholder">Masukkan nomor telepon di bawah...</div>
+  <div id="displayLocation" class="placeholder"></div>
+</div>
+
+<div class="controls">
+  <input type="text" id="nameInput" placeholder="Masukkan nomor telepon">
+  <button id="showBtn">Tampilkan</button>
+  <button id="callBtn">Telepon Korban</button>
+</div>
+
+<div class="phone-modal" id="phoneModal">
+  <div class="phone-box">
+    <h2 id="callStatus">📞 Memanggil…</h2>
+    <p id="phoneName"></p>
+    <button class="close-btn" id="endCall">Tutup Telepon</button>
+  </div>
+</div>
+
+<script>
+// ===== PARTICLE "RTX" SIMULATOR =====
+const canvas = document.getElementById('bgCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const particles = [];
+for(let i=0;i<120;i++){
+  particles.push({
+    x:Math.random()*canvas.width,
+    y:Math.random()*canvas.height,
+    r:Math.random()*2+1,
+    dx:(Math.random()-0.5)*0.5,
+    dy:(Math.random()-0.5)*0.5,
+    glow:Math.random()*0.5+0.5
+  });
+}
+
+function animateParticles(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  particles.forEach(p=>{
+    p.x+=p.dx; p.y+=p.dy;
+    if(p.x>canvas.width)p.x=0;if(p.x<0)p.x=canvas.width;
+    if(p.y>canvas.height)p.y=0;if(p.y<0)p.y=canvas.height;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.shadowColor="#06d6a0";
+    ctx.shadowBlur=8*p.glow;
+    ctx.fillStyle="#06d6a0";
+    ctx.fill();
+  });
+  requestAnimationFrame(animateParticles);
+}
+animateParticles();
+window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;});
+
+// ===== TYPING ANIMATION =====
+const displayName = document.getElementById('displayName');
+const displayLocation = document.getElementById('displayLocation');
+const nameInput = document.getElementById('nameInput');
+const showBtn = document.getElementById('showBtn');
+const callBtn = document.getElementById('callBtn');
+const phoneModal = document.getElementById('phoneModal');
+const callStatus = document.getElementById('callStatus');
+const phoneName = document.getElementById('phoneName');
+const endCall = document.getElementById('endCall');
+
+const fakeLocations = [
+  "Istana Bambu Nusantara",
+  "Gedung Garuda Raya, Kota Bhineka",
+  "Rumah Dinas Fiktif, Kota Sentosa",
+  "Jalan Harmoni No. 45, Provinsi Jaya Abadi"
+];
+
+function typeText(element,text,speed=50){
+  element.innerHTML='';
+  let i=0;
+  const cursor = document.createElement('span');
+  cursor.className='cursor';
+  element.appendChild(cursor);
+  const interval=setInterval(()=>{
+    cursor.insertAdjacentText('beforebegin',text.charAt(i));
+    i++;
+    if(i>=text.length) clearInterval(interval);
+  },speed);
+}
+
+// ===== SHOW NAME =====
+showBtn.addEventListener('click',()=>{
+  const name=nameInput.value.trim();
+  if(name){
+    typeText(displayName,name,50);
+    const location=fakeLocations[Math.floor(Math.random()*fakeLocations.length)];
+    typeText(displayLocation,"Lokasi: "+location,30);
+    displayLocation.classList.remove('placeholder');
+  } else{
+    displayName.textContent="Masukkan nomor telepon di bawah...";
+    displayLocation.textContent="";
+    displayLocation.classList.add('placeholder');
+  }
+});
+
+// ===== CALL SIMULATION =====
+let callTimer; let callSeconds=0;
+function formatTime(sec){ const m=String(Math.floor(sec/60)).padStart(2,'0'); const s=String(sec%60).padStart(2,'0'); return `${m}:${s}`;}
+
+callBtn.addEventListener('click',()=>{
+  const currentName = displayName.textContent && displayName.textContent!=="Masukkan nomor telepon di bawah..." ? displayName.textContent : 'Tanpa Nama';
+  phoneName.textContent=currentName;
+  phoneModal.style.display='flex';
+  callStatus.textContent='📞 Memanggil…';
+  const ringAudio=new Audio('ring.mp3'); ringAudio.loop=true; ringAudio.play();
+  const ringDuration=Math.floor(Math.random()*3000)+2000;
+  setTimeout(()=>{
+    const isAnswered=Math.random()<0.5;
+    ringAudio.pause(); ringAudio.currentTime=0;
+    if(isAnswered){
+      callStatus.innerHTML='✅ Terhubung <span class="pulse">00:00</span>';
+      callSeconds=0;
+      callTimer=setInterval(()=>{
+        callSeconds++;
+        callStatus.innerHTML='✅ Terhubung <span class="pulse">'+formatTime(callSeconds)+'</span>';
+      },1000);
+    }else{
+      callStatus.innerHTML='❌ <span style="color:#ff0055;text-shadow:0 0 5px #ff0055,0 0 10px #ff44aa;">Telepon Ditolak</span>';
+    }
+  },ringDuration);
+});
+endCall.addEventListener('click',()=>{phoneModal.style.display='none'; clearInterval(callTimer);});
+
+</script>
+</body>
+</html>
