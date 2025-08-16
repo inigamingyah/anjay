@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kotak Nama & Lokasi Palsu</title>
+  <title>Kotak Nama & Lokasi</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -160,17 +160,32 @@
 
       phoneName.textContent = currentName;
       phoneModal.style.display = 'flex';
-
       callStatus.textContent = '📞 Memanggil…';
 
+      // Audio dering
+      const ringAudio = new Audio('ring.mp3'); // pastikan file ada
+      ringAudio.loop = true;
+      ringAudio.play();
+
+      // Delay acak 2-5 detik sebelum diangkat/ditolak
+      const ringDuration = Math.floor(Math.random()*3000) + 2000; 
+
       setTimeout(()=>{
-        callStatus.textContent = '✅ Terhubung 00:00';
-        callSeconds = 0;
-        callTimer = setInterval(()=>{
-          callSeconds++;
-          callStatus.textContent = '✅ Terhubung ' + formatTime(callSeconds);
-        },1000);
-      },3000);
+        const isAnswered = Math.random() < 0.5;
+        ringAudio.pause(); // hentikan dering
+        ringAudio.currentTime = 0;
+
+        if(isAnswered){
+          callStatus.textContent = '✅ Terhubung 00:00';
+          callSeconds = 0;
+          callTimer = setInterval(()=>{
+            callSeconds++;
+            callStatus.textContent = '✅ Terhubung ' + formatTime(callSeconds);
+          },1000);
+        } else {
+          callStatus.textContent = '❌ Telepon Ditolak';
+        }
+      }, ringDuration);
     });
 
     endCall.addEventListener('click', ()=>{
