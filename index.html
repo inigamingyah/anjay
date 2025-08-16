@@ -148,13 +148,13 @@
         const location = fakeLocations[Math.floor(Math.random() * fakeLocations.length)];
         displayLocation.textContent = "Lokasi: " + location;
       } else {
-        displayName.textContent = "Masukkan nama di bawah...";
+        displayName.textContent = "Masukkan nomor telepon di bawah...";
         displayLocation.textContent = "";
       }
     });
 
     callBtn.addEventListener('click', ()=>{
-      const currentName = displayName.textContent && displayName.textContent !== "Masukkan nama di bawah..."
+      const currentName = displayName.textContent && displayName.textContent !== "Masukkan nomor telepon di bawah..."
         ? displayName.textContent
         : 'Tanpa Nama';
 
